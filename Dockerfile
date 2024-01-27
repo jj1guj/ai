@@ -1,4 +1,4 @@
-FROM node:18-bullseye
+FROM node:lts
 
 RUN apt-get update && apt-get install -y tini libpango1.0-dev libcairo2-dev libjpeg-dev libgif-dev build-essential
 
