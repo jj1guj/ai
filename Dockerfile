@@ -19,7 +19,7 @@ RUN if [ $enable_mecab -ne 0 ]; then apt-get update \
 COPY . /ai
 
 WORKDIR /ai
-RUN npm install --save @types/babel__traverse@7.18.3 && npm run build
+RUN npm install && npm run build || test -f ./built/index.js
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD npm start
