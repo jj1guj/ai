@@ -5,6 +5,8 @@ services:
       context: .
       args:
         - enable_mecab=1
+    environment:
+      - TZ=Asia/Tokyo
     platform: linux/aarch64
     volumes:
       - './config.json:/ai/config.json:ro'
