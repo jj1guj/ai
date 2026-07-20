@@ -3,6 +3,7 @@ import { EventEmitter } from 'events';
 import WebSocket from 'ws';
 import _ReconnectingWebsocket from 'reconnecting-websocket';
 import config from './config.js';
+import log from './utils/log.js';
 
 const ReconnectingWebsocket = _ReconnectingWebsocket as unknown as typeof _ReconnectingWebsocket['default'];
 
@@ -11,8 +12,11 @@ const ReconnectingWebsocket = _ReconnectingWebsocket as unknown as typeof _Recon
  */
 export default class Stream extends EventEmitter {
 	private stream: any;
+	private socket?: WebSocket;
 	private state: string;
 	private buffer: any[];
+	private awaitingPong = false;
+	private heartbeatTimer: NodeJS.Timeout;
 	private sharedConnectionPools: Pool[] = [];
 	private sharedConnections: SharedConnection[] = [];
 	private nonSharedConnections: NonSharedConnection[] = [];
@@ -22,13 +26,62 @@ export default class Stream extends EventEmitter {
 
 		this.state = 'initializing';
 		this.buffer = [];
+		this.openStream();
+		this.heartbeatTimer = setInterval(this.checkHeartbeat, 60_000);
+	}
+
+	@bindThis
+	private openStream() {
+		const stream = this;
+		class HeartbeatWebSocket extends WebSocket {
+			constructor(url: string | URL, protocols?: string | string[]) {
+				super(url, protocols);
+				stream.socket = this;
+				this.on('pong', stream.onPong);
+			}
+		}
 
 		this.stream = new ReconnectingWebsocket(`${config.wsUrl}/streaming?i=${config.i}`, [], {
-			WebSocket: WebSocket
+			WebSocket: HeartbeatWebSocket
 		});
 		this.stream.addEventListener('open', this.onOpen);
 		this.stream.addEventListener('close', this.onClose);
 		this.stream.addEventListener('message', this.onMessage);
+	}
+
+	@bindThis
+	private resetStream() {
+		this.stream.removeEventListener('open', this.onOpen);
+		this.stream.removeEventListener('close', this.onClose);
+		this.stream.removeEventListener('message', this.onMessage);
+		this.stream.close();
+		this.socket = undefined;
+		this.awaitingPong = false;
+		this.state = 'reconnecting';
+		this.openStream();
+	}
+
+	@bindThis
+	private onPong() {
+		this.awaitingPong = false;
+	}
+
+	@bindThis
+	private checkHeartbeat() {
+		if (this.socket?.readyState === WebSocket.OPEN) {
+			if (this.awaitingPong) {
+				log('[Stream]: WebSocket heartbeat timed out; reconnecting...');
+				this.socket.terminate();
+				return;
+			}
+
+			this.awaitingPong = true;
+			this.socket.ping();
+			return;
+		}
+
+		log('[Stream]: WebSocket is not connected; rebuilding connection...');
+		this.resetStream();
 	}
 
 	@bindThis
@@ -70,6 +123,8 @@ export default class Stream extends EventEmitter {
 		const isReconnect = this.state == 'reconnecting';
 
 		this.state = 'connected';
+		this.awaitingPong = false;
+		log(`[Stream]: WebSocket connected${isReconnect ? ' again' : ''}`);
 		this.emit('_connected_');
 
 		// バッファーを処理
@@ -96,6 +151,9 @@ export default class Stream extends EventEmitter {
 	@bindThis
 	private onClose() {
 		this.state = 'reconnecting';
+		this.awaitingPong = false;
+		this.socket = undefined;
+		log('[Stream]: WebSocket disconnected; reconnecting...');
 		this.emit('_disconnected_');
 	}
 
@@ -151,8 +209,11 @@ export default class Stream extends EventEmitter {
 	 */
 	@bindThis
 	public close() {
+		clearInterval(this.heartbeatTimer);
 		this.stream.removeEventListener('open', this.onOpen);
+		this.stream.removeEventListener('close', this.onClose);
 		this.stream.removeEventListener('message', this.onMessage);
+		this.stream.close();
 	}
 }
 

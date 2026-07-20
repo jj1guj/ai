@@ -93,7 +93,7 @@ export default class 藍 {
 		this.db = new loki(file, {
 			autoload: true,
 			autosave: true,
-			autosaveInterval: 1000,
+			autosaveInterval: 60_000,
 			autoloadCallback: err => {
 				if (err) {
 					this.log(chalk.red(`Failed to load the memory: ${err}`));
