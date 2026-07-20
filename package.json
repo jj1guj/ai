@@ -34,12 +34,12 @@
 		"twemoji-parser": "14.0.0",
 		"typescript": "5.8.2",
 		"typescript-transform-paths": "3.5.5",
-		"uuid": "9.0.1",
-		"ws": "8.18.1"
-	},
-	"devDependencies": {
+		"uuid": "14.0.1",
+		"ws": "8.21.1"
 	},
 	"nodemonConfig": {
-    "ignore": ["memory.json"]
-  }
+		"ignore": [
+			"memory.json"
+		]
+	}
 }
